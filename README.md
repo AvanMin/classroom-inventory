@@ -33,13 +33,23 @@
 
 ## Структура проекта (планируемая)
 ├── main.py              # Точка входа, меню
+
 ├── inventory.py         # Логика работы с записями
+
 ├── storage.py           # Работа с JSON
+
 ├── data/
+
 │   └── inventory.json   # Файл с данными
+
 ├── tests/               # Автоматические тесты
+
 ├── README.md
+
 ├── USER_STORIES.md
+
 ├── requirements.txt
+
 └── .gitignoreТекст
+
 ## Запуск (будет дополнено)
