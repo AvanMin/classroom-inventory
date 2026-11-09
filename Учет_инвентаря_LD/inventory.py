@@ -1,0 +1,237 @@
+"""Модель инвентарной записи и демонстрационные данные.
+
+Спринт 1 (роль LD): описана модель записи об оборудовании и подготовлен
+набор демонстрационных данных, на котором работает пункт меню
+"Показать оборудование".
+
+Модуль пока не зависит от файловой системы: JSON-хранилище появится
+в спринте 4. Интерфейсы ``Inventory.all()`` и ``Equipment.to_dict()``
+зафиксированы уже сейчас, чтобы меню и хранилище разрабатывались
+независимо.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import date
+from typing import Iterable, Iterator
+
+#: Допустимые состояния оборудования (согласовано с PO).
+STATES: tuple[str, ...] = ("исправно", "требует ремонта", "списано")
+
+#: Допустимые типы оборудования. В спринте 2 этот список станет
+#: источником подсказок при добавлении записи.
+KINDS: tuple[str, ...] = (
+    "ПК",
+    "ноутбук",
+    "монитор",
+    "принтер",
+    "МФУ",
+    "сканер",
+    "проектор",
+    "интерактивная доска",
+    "ИБП",
+    "коммутатор",
+    "другое",
+)
+
+#: Поля, без которых запись не имеет смысла.
+REQUIRED_FIELDS: tuple[str, ...] = (
+    "inventory_number",
+    "kind",
+    "name",
+    "room",
+    "state",
+)
+
+
+@dataclass(frozen=True, slots=True)
+class Equipment:
+    """Одна инвентарная запись.
+
+    Объект неизменяемый: в следующих спринтах редактирование будет
+    создавать новую запись, поэтому случайно изменить данные "на месте"
+    нельзя.
+    """
+
+    inventory_number: str
+    kind: str
+    name: str
+    room: str
+    state: str
+    received_at: str = ""  # дата в формате ISO (YYYY-MM-DD)
+    responsible: str = ""
+
+    def __post_init__(self) -> None:
+        for field_name in REQUIRED_FIELDS:
+            value = getattr(self, field_name)
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"Поле {field_name!r} обязательно")
+        if self.state not in STATES:
+            raise ValueError(
+                f"Недопустимое состояние {self.state!r}; "
+                f"ожидается одно из: {', '.join(STATES)}"
+            )
+
+    @property
+    def received_at_display(self) -> str:
+        """Дата поступления в привычном виде ДД.ММ.ГГГГ."""
+        if not self.received_at:
+            return "-"
+        try:
+            return date.fromisoformat(self.received_at).strftime("%d.%m.%Y")
+        except ValueError:
+            return self.received_at
+
+    def to_dict(self) -> dict[str, str]:
+        """Запись в формате будущего JSON-файла (спринт 4)."""
+        return {
+            "inventory_number": self.inventory_number,
+            "type": self.kind,
+            "name": self.name,
+            "room": self.room,
+            "state": self.state,
+            "received_at": self.received_at,
+            "responsible": self.responsible,
+        }
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, object]) -> "Equipment":
+        """Создать запись из словаря JSON-файла (спринт 4).
+
+        Ошибки данных не скрываются: некорректная запись вызовет
+        ``ValueError``, и вызывающий код сможет её обработать.
+        """
+        if not isinstance(payload, dict):
+            raise ValueError("Запись должна быть объектом JSON")
+
+        def text(key: str) -> str:
+            value = payload.get(key, "")
+            if value is None:
+                return ""
+            if not isinstance(value, str):
+                raise ValueError(f"Поле {key!r} должно быть строкой")
+            return " ".join(value.split())
+
+        number = text("inventory_number").upper()
+        kind = text("type")
+        name = text("name")
+        room = text("room")
+        state = text("state").lower()
+        if not all((number, kind, name, room, state)):
+            raise ValueError("Не заполнены обязательные поля записи")
+
+        return cls(
+            inventory_number=number,
+            kind=kind,
+            name=name,
+            room=room,
+            state=state,
+            received_at=text("received_at"),
+            responsible=text("responsible"),
+        )
+
+
+class Inventory:
+    """Набор инвентарных записей в памяти.
+
+    В спринте 4 источником данных станет JSON-файл, но интерфейс
+    (``all``, ``__len__``) сохранится, поэтому меню переписывать не нужно.
+    """
+
+    def __init__(self, records: Iterable[Equipment] = ()) -> None:
+        self._records: list[Equipment] = list(records)
+
+    def __len__(self) -> int:
+        return len(self._records)
+
+    def __iter__(self) -> Iterator[Equipment]:
+        return iter(self.all())
+
+    def all(self) -> list[Equipment]:
+        """Все записи, отсортированные по инвентарному номеру."""
+        return sorted(self._records, key=lambda item: item.inventory_number)
+
+
+#: Демонстрационные записи для первого спринта (Definition of Done:
+#: не менее 5 записей). Данные охватывают разные типы, кабинеты
+#: и состояния, чтобы проверить вывод таблицы.
+DEMO_RECORDS: tuple[Equipment, ...] = (
+    Equipment(
+        inventory_number="PC-0001",
+        kind="ПК",
+        name="Системный блок Dell OptiPlex 3070",
+        room="204",
+        state="исправно",
+        received_at="2021-09-01",
+        responsible="Иванов И. И.",
+    ),
+    Equipment(
+        inventory_number="PC-0002",
+        kind="ПК",
+        name="Системный блок HP ProDesk 400 G6",
+        room="204",
+        state="требует ремонта",
+        received_at="2020-11-12",
+        responsible="Иванов И. И.",
+    ),
+    Equipment(
+        inventory_number="MON-0001",
+        kind="монитор",
+        name="Монитор Dell P2219H, 22 дюйма",
+        room="204",
+        state="исправно",
+        received_at="2021-09-01",
+        responsible="Иванов И. И.",
+    ),
+    Equipment(
+        inventory_number="PRN-0001",
+        kind="принтер",
+        name="Принтер HP LaserJet Pro M404dn",
+        room="305",
+        state="исправно",
+        received_at="2022-02-14",
+        responsible="Петрова А. С.",
+    ),
+    Equipment(
+        inventory_number="MFP-0001",
+        kind="МФУ",
+        name="МФУ Kyocera ECOSYS M2040dn",
+        room="101",
+        state="требует ремонта",
+        received_at="2019-09-02",
+        responsible="Сидоров В. П.",
+    ),
+    Equipment(
+        inventory_number="PRJ-0001",
+        kind="проектор",
+        name="Проектор Epson EB-X51",
+        room="305",
+        state="исправно",
+        received_at="2023-01-10",
+        responsible="Петрова А. С.",
+    ),
+    Equipment(
+        inventory_number="NB-0001",
+        kind="ноутбук",
+        name="Ноутбук Lenovo ThinkPad E14",
+        room="112",
+        state="исправно",
+        received_at="2024-03-18",
+        responsible="Кузнецова М. В.",
+    ),
+    Equipment(
+        inventory_number="IWB-0001",
+        kind="интерактивная доска",
+        name="Интерактивная доска Smart SB680",
+        room="101",
+        state="списано",
+        received_at="2015-09-01",
+        responsible="Сидоров В. П.",
+    ),
+)
+
+
+def demo_inventory() -> Inventory:
+    """Справочник на демонстрационных данных для спринта 1."""
+    return Inventory(DEMO_RECORDS)
