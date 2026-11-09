@@ -1,13 +1,4 @@
 #!/usr/bin/env python3
-"""Система учёта инвентаря компьютерных классов.
-
-Спринт 1 (роль LD): каркас приложения - запуск, главное меню, вывод
-демонстрационного справочника. Остальные пункты меню зарезервированы
-и подключаются в следующих спринтах, чтобы структура проекта не
-менялась при переходе от спринта к спринту.
-
-Запуск:  python main.py
-"""
 
 from __future__ import annotations
 
@@ -190,10 +181,13 @@ def main(argv: list[str] | None = None) -> int:
             print("До встречи!")
             return 0
 
+        if choice == "1":
+            show_inventory(inventory)
+            continue
+
         if choice == "2":
             add_equipment(inventory)
             continue
-
         item = MENU_BY_KEY.get(choice)
         if item is None:
             print("Такого пункта нет. Введите число из меню.")
