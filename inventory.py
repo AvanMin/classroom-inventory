@@ -148,6 +148,27 @@ class Inventory:
     def __iter__(self) -> Iterator[Equipment]:
         return iter(self.all())
 
+    def has_number(self, number: str) -> bool:
+        """Проверить, существует ли запись с таким инвентарным номером."""
+        normalized = number.strip().upper()
+        return any(item.inventory_number.upper() == normalized for item in self._records)
+
+    def get_by_number(self, number: str) -> Equipment | None:
+        """Найти запись по инвентарному номеру. None — если не найдена."""
+        normalized = number.strip().upper()
+        for item in self._records:
+            if item.inventory_number.upper() == normalized:
+                return item
+        return None
+
+    def add(self, equipment: Equipment) -> None:
+        """Добавить новую запись. Если номер уже существует — ValueError."""
+        if self.has_number(equipment.inventory_number):
+            raise ValueError(
+                f"Запись с номером {equipment.inventory_number!r} уже существует"
+            )
+        self._records.append(equipment)
+
     def all(self) -> list[Equipment]:
         """Все записи, отсортированные по инвентарному номеру."""
         return sorted(self._records, key=lambda item: item.inventory_number)

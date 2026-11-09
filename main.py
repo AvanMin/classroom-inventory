@@ -13,13 +13,13 @@ from __future__ import annotations
 
 import sys
 
-from inventory import Equipment, Inventory, demo_inventory
+from inventory import Equipment, Inventory, demo_inventory, KINDS, STATES
 
 #: Пункты меню: (клавиша, название, спринт реализации).
 #: ``None`` в третьем элементе означает, что пункт реализован.
 MENU: tuple[tuple[str, str, str | None], ...] = (
     ("1", "Показать оборудование", None),
-    ("2", "Добавить запись", "спринте 2"),
+    ("2", "Добавить запись", None),
     ("3", "Найти оборудование", "спринте 3"),
     ("4", "Изменить запись", "спринте 3"),
     ("5", "Удалить запись", "спринте 3"),
@@ -95,6 +95,82 @@ def show_inventory(inventory: Inventory) -> None:
     print()
     print(f"Всего записей: {len(records)}")
 
+def add_equipment(inventory: Inventory) -> None:
+    """Пункт 2: добавить новую запись с проверками."""
+    print()
+    print("ДОБАВЛЕНИЕ НОВОЙ ЗАПИСИ")
+    print("Пустое поле или Ctrl+C — отмена.")
+    print()
+
+    try:
+        number = input("Инвентарный номер: ").strip()
+        if not number:
+            print("Отменено: номер не может быть пустым.")
+            return
+
+        if inventory.has_number(number):
+            print(f"Ошибка: запись с номером {number!r} уже существует.")
+            return
+
+        print("\nДоступные типы:")
+        for i, kind in enumerate(KINDS, 1):
+            print(f"  {i}. {kind}")
+        kind_input = input("Тип оборудования (номер или название): ").strip()
+        if not kind_input:
+            print("Отменено.")
+            return
+
+        # Можно ввести номер из списка или название
+        if kind_input.isdigit() and 1 <= int(kind_input) <= len(KINDS):
+            kind = KINDS[int(kind_input) - 1]
+        else:
+            kind = kind_input
+
+        name = input("Наименование: ").strip()
+        if not name:
+            print("Отменено: наименование обязательно.")
+            return
+
+        room = input("Кабинет: ").strip()
+        if not room:
+            print("Отменено: кабинет обязателен.")
+            return
+
+        print("\nДоступные состояния:")
+        for i, state in enumerate(STATES, 1):
+            print(f"  {i}. {state}")
+        state_input = input("Состояние (номер или название): ").strip().lower()
+        if not state_input:
+            print("Отменено.")
+            return
+
+        if state_input.isdigit() and 1 <= int(state_input) <= len(STATES):
+            state = STATES[int(state_input) - 1]
+        else:
+            state = state_input
+
+        # Дополнительные поля (необязательные)
+        received_at = input("Дата поступления (ГГГГ-ММ-ДД, можно пусто): ").strip()
+        responsible = input("Ответственный (можно пусто): ").strip()
+
+        equipment = Equipment(
+            inventory_number=number.upper(),
+            kind=kind,
+            name=name,
+            room=room,
+            state=state,
+            received_at=received_at,
+            responsible=responsible,
+        )
+
+        inventory.add(equipment)
+        print()
+        print(f"Запись {equipment.inventory_number} успешно добавлена.")
+
+    except ValueError as e:
+        print(f"Ошибка: {e}")
+    except (EOFError, KeyboardInterrupt):
+        print("\nОтменено.")
 
 def main(argv: list[str] | None = None) -> int:
     """Точка входа приложения. Возвращает код завершения."""
@@ -114,8 +190,8 @@ def main(argv: list[str] | None = None) -> int:
             print("До встречи!")
             return 0
 
-        if choice == "1":
-            show_inventory(inventory)
+        if choice == "2":
+            add_equipment(inventory)
             continue
 
         item = MENU_BY_KEY.get(choice)
