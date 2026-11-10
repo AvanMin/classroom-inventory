@@ -38,7 +38,7 @@ def test_load_empty_file(temp_json: Path):
 
 def test_load_corrupted_json(temp_json: Path):
     """Проверка: если JSON испорчен, программа не падает, а возвращает пустой справочник."""
-    temp_json.write_text("{это_не_json: 123, broken")
+    temp_json.write_text("{это_не_json: 123, broken", encoding="utf-8")
     inventory = load_inventory(temp_json)
     assert len(inventory) == 0
 
