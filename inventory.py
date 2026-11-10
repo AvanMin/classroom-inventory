@@ -1,26 +1,19 @@
 """Модель инвентарной записи и демонстрационные данные.
 
-Спринт 1 (роль LD): описана модель записи об оборудовании и подготовлен
-набор демонстрационных данных, на котором работает пункт меню
-"Показать оборудование".
-
-Модуль пока не зависит от файловой системы: JSON-хранилище появится
-в спринте 4. Интерфейсы ``Inventory.all()`` и ``Equipment.to_dict()``
-зафиксированы уже сейчас, чтобы меню и хранилище разрабатывались
-независимо.
+Спринт 3 (роль LD): реализованы методы поиска по кабинету,
+редактирования состояния/кабинета и удаления записей.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 from typing import Iterable, Iterator
 
 #: Допустимые состояния оборудования (согласовано с PO).
 STATES: tuple[str, ...] = ("исправно", "требует ремонта", "списано")
 
-#: Допустимые типы оборудования. В спринте 2 этот список станет
-#: источником подсказок при добавлении записи.
+#: Допустимые типы оборудования.
 KINDS: tuple[str, ...] = (
     "ПК",
     "ноутбук",
@@ -49,9 +42,7 @@ REQUIRED_FIELDS: tuple[str, ...] = (
 class Equipment:
     """Одна инвентарная запись.
 
-    Объект неизменяемый: в следующих спринтах редактирование будет
-    создавать новую запись, поэтому случайно изменить данные "на месте"
-    нельзя.
+    Объект неизменяемый: редактирование создаёт новую запись через replace.
     """
 
     inventory_number: str
@@ -97,11 +88,7 @@ class Equipment:
 
     @classmethod
     def from_dict(cls, payload: dict[str, object]) -> "Equipment":
-        """Создать запись из словаря JSON-файла (спринт 4).
-
-        Ошибки данных не скрываются: некорректная запись вызовет
-        ``ValueError``, и вызывающий код сможет её обработать.
-        """
+        """Создать запись из словаря JSON-файла (спринт 4)."""
         if not isinstance(payload, dict):
             raise ValueError("Запись должна быть объектом JSON")
 
@@ -133,11 +120,7 @@ class Equipment:
 
 
 class Inventory:
-    """Набор инвентарных записей в памяти.
-
-    В спринте 4 источником данных станет JSON-файл, но интерфейс
-    (``all``, ``__len__``) сохранится, поэтому меню переписывать не нужно.
-    """
+    """Набор инвентарных записей в памяти."""
 
     def __init__(self, records: Iterable[Equipment] = ()) -> None:
         self._records: list[Equipment] = list(records)
@@ -156,10 +139,22 @@ class Inventory:
     def get_by_number(self, number: str) -> Equipment | None:
         """Найти запись по инвентарному номеру. None — если не найдена."""
         normalized = number.strip().upper()
+        if not normalized:
+            return None
         for item in self._records:
             if item.inventory_number.upper() == normalized:
                 return item
         return None
+
+    def search_by_room(self, room: str) -> list[Equipment]:
+        """Поиск записей по номеру/названию кабинета (без учета регистра)."""
+        target = room.strip().lower()
+        if not target:
+            return []
+        return [
+            item for item in self._records
+            if target in item.room.strip().lower()
+        ]
 
     def add(self, equipment: Equipment) -> None:
         """Добавить новую запись. Если номер уже существует — ValueError."""
@@ -169,14 +164,56 @@ class Inventory:
             )
         self._records.append(equipment)
 
+    def update(
+        self,
+        number: str,
+        new_room: str | None = None,
+        new_state: str | None = None,
+    ) -> Equipment:
+        """Изменить кабинет и/или состояние записи.
+
+        Создаёт обновлённую копию записи (frozen=True) и заменяет её в списке.
+        """
+        item = self.get_by_number(number)
+        if item is None:
+            raise KeyError(f"Оборудование с номером {number!r} не найдено")
+
+        updates: dict[str, str] = {}
+        if new_room is not None and new_room.strip():
+            updates["room"] = new_room.strip()
+
+        if new_state is not None and new_state.strip():
+            state_clean = new_state.strip().lower()
+            if state_clean not in STATES:
+                raise ValueError(
+                    f"Недопустимое состояние {new_state!r}. Ожидается: {', '.join(STATES)}"
+                )
+            updates["state"] = state_clean
+
+        if not updates:
+            return item
+
+        updated_item = replace(item, **updates)
+        idx = self._records.index(item)
+        self._records[idx] = updated_item
+        return updated_item
+
+    def delete(self, number: str) -> bool:
+        """Удалить запись по инвентарному номеру.
+
+        Возвращает True в случае успеха, False если запись не найдена.
+        """
+        item = self.get_by_number(number)
+        if item is not None:
+            self._records.remove(item)
+            return True
+        return False
+
     def all(self) -> list[Equipment]:
         """Все записи, отсортированные по инвентарному номеру."""
         return sorted(self._records, key=lambda item: item.inventory_number)
 
 
-#: Демонстрационные записи для первого спринта (Definition of Done:
-#: не менее 5 записей). Данные охватывают разные типы, кабинеты
-#: и состояния, чтобы проверить вывод таблицы.
 DEMO_RECORDS: tuple[Equipment, ...] = (
     Equipment(
         inventory_number="PC-0001",
@@ -254,5 +291,5 @@ DEMO_RECORDS: tuple[Equipment, ...] = (
 
 
 def demo_inventory() -> Inventory:
-    """Справочник на демонстрационных данных для спринта 1."""
+    """Справочник на демонстрационных данных."""
     return Inventory(DEMO_RECORDS)
