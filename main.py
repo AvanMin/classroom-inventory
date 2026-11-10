@@ -1,13 +1,19 @@
 #!/usr/bin/env python3
+"""Консольное приложение учёта инвентаря.
+
+Спринт 4 (роль LD): данные загружаются из data/inventory.json при старте
+и сохраняются после каждой мутирующей операции (add / update / delete).
+"""
 
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
-from inventory import Equipment, Inventory, demo_inventory, KINDS, STATES
+from inventory import Equipment, Inventory, KINDS, STATES, demo_inventory
+from storage import DEFAULT_DATA_FILE, load_inventory, save_inventory
 
 #: Пункты меню: (клавиша, название, спринт реализации).
-#: Пункты 1, 2, 3, 4, 5 активны в Спринте 3.
 MENU: tuple[tuple[str, str, str | None], ...] = (
     ("1", "Показать оборудование", None),
     ("2", "Добавить запись", None),
@@ -20,7 +26,6 @@ MENU: tuple[tuple[str, str, str | None], ...] = (
 
 MENU_BY_KEY = {key: (title, sprint) for key, title, sprint in MENU}
 
-#: Колонки таблицы: (заголовок, атрибут записи, ширина).
 COLUMNS: tuple[tuple[str, str, int], ...] = (
     ("Номер", "inventory_number", 10),
     ("Тип", "kind", 19),
@@ -33,7 +38,6 @@ LINE = "-" * 95
 
 
 def shrink(text: str, width: int) -> str:
-    """Обрезать значение до ширины колонки, сохранив выравнивание."""
     value = " ".join(str(text).split())
     if len(value) <= width:
         return value.ljust(width)
@@ -41,7 +45,6 @@ def shrink(text: str, width: int) -> str:
 
 
 def render_table(records: list[Equipment]) -> list[str]:
-    """Собрать строки простой ASCII-таблицы."""
     header = "  ".join(shrink(title, width) for title, _, width in COLUMNS)
     lines = [header, "-" * len(header)]
     for record in records:
@@ -54,7 +57,6 @@ def render_table(records: list[Equipment]) -> list[str]:
 
 
 def print_equipment_card(item: Equipment) -> None:
-    """Подробный вывод одной карточки оборудования."""
     print("  +---------------------------------------------------")
     print(f"  | Номер:         {item.inventory_number}")
     print(f"  | Тип:           {item.kind}")
@@ -66,13 +68,13 @@ def print_equipment_card(item: Equipment) -> None:
     print("  +---------------------------------------------------")
 
 
-def print_banner(inventory: Inventory) -> None:
+def print_banner(inventory: Inventory, data_file: Path) -> None:
     print("=" * 95)
     print("  СИСТЕМА УЧЁТА ИНВЕНТАРЯ КОМПЬЮТЕРНЫХ КЛАССОВ")
-    print("  Спринт 3 - полный CRUD и поиск (роль LD)")
+    print("  Спринт 4 - постоянное хранение данных (роль LD)")
     print("=" * 95)
     print(f"  Записей в справочнике: {len(inventory)}")
-    print("  Постоянное хранилище JSON появится в спринте 4.")
+    print(f"  Файл данных: {data_file}")
 
 
 def print_menu() -> None:
@@ -85,7 +87,6 @@ def print_menu() -> None:
 
 
 def show_inventory(inventory: Inventory) -> None:
-    """Пункт 1: показать все записи."""
     records = inventory.all()
     print()
     print("СПРАВОЧНИК ОБОРУДОВАНИЯ")
@@ -99,8 +100,7 @@ def show_inventory(inventory: Inventory) -> None:
     print(f"Всего записей: {len(records)}")
 
 
-def add_equipment(inventory: Inventory) -> None:
-    """Пункт 2: добавить новую запись."""
+def add_equipment(inventory: Inventory, data_file: Path) -> None:
     print()
     print("ДОБАВЛЕНИЕ НОВОЙ ЗАПИСИ")
     print("Пустое поле или Ctrl+C — отмена.")
@@ -111,7 +111,6 @@ def add_equipment(inventory: Inventory) -> None:
         if not number:
             print("Отменено: номер не может быть пустым.")
             return
-
         if inventory.has_number(number):
             print(f"Ошибка: запись с номером {number!r} уже существует.")
             return
@@ -123,7 +122,6 @@ def add_equipment(inventory: Inventory) -> None:
         if not kind_input:
             print("Отменено.")
             return
-
         if kind_input.isdigit() and 1 <= int(kind_input) <= len(KINDS):
             kind = KINDS[int(kind_input) - 1]
         else:
@@ -146,7 +144,6 @@ def add_equipment(inventory: Inventory) -> None:
         if not state_input:
             print("Отменено.")
             return
-
         if state_input.isdigit() and 1 <= int(state_input) <= len(STATES):
             state = STATES[int(state_input) - 1]
         else:
@@ -166,9 +163,9 @@ def add_equipment(inventory: Inventory) -> None:
         )
 
         inventory.add(equipment)
+        save_inventory(inventory, data_file)
         print()
-        print(f"Запись {equipment.inventory_number} успешно добавлена.")
-
+        print(f"Запись {equipment.inventory_number} успешно добавлена и сохранена.")
     except ValueError as e:
         print(f"Ошибка: {e}")
     except (EOFError, KeyboardInterrupt):
@@ -176,7 +173,6 @@ def add_equipment(inventory: Inventory) -> None:
 
 
 def find_equipment(inventory: Inventory) -> None:
-    """Пункт 3: поиск по инвентарному номеру или кабинету."""
     print()
     print("ПОИСК ОБОРУДОВАНИЯ")
     print("  1. По инвентарному номеру")
@@ -196,7 +192,6 @@ def find_equipment(inventory: Inventory) -> None:
             else:
                 print("\nНайдено оборудование:")
                 print_equipment_card(item)
-
         elif sub_choice == "2":
             room = input("Введите номер или название кабинета: ").strip()
             if not room:
@@ -217,8 +212,7 @@ def find_equipment(inventory: Inventory) -> None:
         print("\nОтменено.")
 
 
-def edit_equipment(inventory: Inventory) -> None:
-    """Пункт 4: изменение кабинета и/или состояния оборудования."""
+def edit_equipment(inventory: Inventory, data_file: Path) -> None:
     print()
     print("ИЗМЕНЕНИЕ ЗАПИСИ ОБОРУДОВАНИЯ")
     try:
@@ -226,7 +220,6 @@ def edit_equipment(inventory: Inventory) -> None:
         if not number:
             print("Номер не указан.")
             return
-
         item = inventory.get_by_number(number)
         if item is None:
             print(f"Запись с номером {number!r} не найдена.")
@@ -259,17 +252,16 @@ def edit_equipment(inventory: Inventory) -> None:
             new_room=new_room or None,
             new_state=new_state or None,
         )
-        print("\nЗапись успешно обновлена:")
+        save_inventory(inventory, data_file)
+        print("\nЗапись успешно обновлена и сохранена:")
         print_equipment_card(updated)
-
     except (ValueError, KeyError) as e:
         print(f"Ошибка при обновлении: {e}")
     except (EOFError, KeyboardInterrupt):
         print("\nОтменено.")
 
 
-def delete_equipment(inventory: Inventory) -> None:
-    """Пункт 5: удаление записи с подтверждением."""
+def delete_equipment(inventory: Inventory, data_file: Path) -> None:
     print()
     print("УДАЛЕНИЕ ЗАПИСИ ОБОРУДОВАНИЯ")
     try:
@@ -277,7 +269,6 @@ def delete_equipment(inventory: Inventory) -> None:
         if not number:
             print("Номер не указан.")
             return
-
         item = inventory.get_by_number(number)
         if item is None:
             print(f"Запись с номером {number!r} не найдена.")
@@ -286,24 +277,38 @@ def delete_equipment(inventory: Inventory) -> None:
         print("\nЗапись для удаления:")
         print_equipment_card(item)
 
-        confirm = input("\nВы уверены, что хотите удалить эту запись? (y/n / да/нет): ").strip().lower()
+        confirm = input(
+            "\nВы уверены, что хотите удалить эту запись? (y/n / да/нет): "
+        ).strip().lower()
         if confirm in {"y", "yes", "да", "д"}:
             if inventory.delete(number):
-                print(f"Запись {item.inventory_number} успешно удалена.")
+                save_inventory(inventory, data_file)
+                print(f"Запись {item.inventory_number} успешно удалена и сохранена.")
             else:
                 print("Не удалось удалить запись.")
         else:
             print("Удаление отменено пользователем.")
-
     except (EOFError, KeyboardInterrupt):
         print("\nОтменено.")
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Точка входа приложения. Возвращает код завершения."""
+    """Точка входа. Возвращает код завершения."""
     del argv
-    inventory = demo_inventory()
-    print_banner(inventory)
+
+    data_file = DEFAULT_DATA_FILE
+    inventory = load_inventory(data_file)
+
+    # Если данных нет вовсе — стартуем на демо-записях и сразу сохраняем.
+    if len(inventory) == 0:
+        print("[main] Файл данных пуст. Заполняем демонстрационным справочником.")
+        inventory = demo_inventory()
+        try:
+            save_inventory(inventory, data_file)
+        except OSError:
+            print("[main] Не удалось сохранить демо-данные — работаем только в памяти.")
+
+    print_banner(inventory, data_file)
 
     while True:
         print_menu()
@@ -320,21 +325,17 @@ def main(argv: list[str] | None = None) -> int:
         if choice == "1":
             show_inventory(inventory)
             continue
-
         if choice == "2":
-            add_equipment(inventory)
+            add_equipment(inventory, data_file)
             continue
-
         if choice == "3":
             find_equipment(inventory)
             continue
-
         if choice == "4":
-            edit_equipment(inventory)
+            edit_equipment(inventory, data_file)
             continue
-
         if choice == "5":
-            delete_equipment(inventory)
+            delete_equipment(inventory, data_file)
             continue
 
         item = MENU_BY_KEY.get(choice)
