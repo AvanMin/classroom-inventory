@@ -71,7 +71,6 @@ def print_equipment_card(item: Equipment) -> None:
 def print_banner(inventory: Inventory, data_file: Path) -> None:
     print("=" * 95)
     print("  СИСТЕМА УЧЁТА ИНВЕНТАРЯ КОМПЬЮТЕРНЫХ КЛАССОВ")
-    print("  Спринт 4 - постоянное хранение данных (роль LD)")
     print("=" * 95)
     print(f"  Записей в справочнике: {len(inventory)}")
     print(f"  Файл данных: {data_file}")
