@@ -1,67 +1,103 @@
+"""Тесты файлового хранилища (спринт 5, QA)."""
+
+from __future__ import annotations
+
 import json
-import pytest
 from pathlib import Path
+
+import pytest
 
 from inventory import Equipment, Inventory
 from storage import load_inventory, save_inventory
 
 
-@pytest.fixture
-def temp_json(tmp_path: Path) -> Path:
-    """Фикстура, предоставляющая изолированный временный файл для каждого теста."""
-    return tmp_path / "test_inventory.json"
-
-
-@pytest.fixture
-def sample_equipment() -> Equipment:
+def make(number: str = "PC-0001") -> Equipment:
     return Equipment(
-        inventory_number="QA-001",
+        inventory_number=number,
         kind="ПК",
-        name="Тестовый стенд QA",
-        room="404",
-        state="исправно"
+        name="Системный блок",
+        room="204",
+        state="исправно",
+        received_at="2021-09-01",
+        responsible="Иванов И. И.",
     )
 
 
-def test_load_missing_file(temp_json: Path):
-    """Проверка: если файла нет, загружается пустой справочник без ошибок."""
-    inventory = load_inventory(temp_json)
-    assert len(inventory) == 0
+def test_load_missing_file_returns_empty(tmp_path: Path) -> None:
+    target = tmp_path / "nope" / "inventory.json"
+    inv = load_inventory(target)
+    assert len(inv) == 0
 
 
-def test_load_empty_file(temp_json: Path):
-    """Проверка: если файл существует, но пуст, загружается пустой справочник."""
-    temp_json.write_text("")
-    inventory = load_inventory(temp_json)
-    assert len(inventory) == 0
+def test_load_empty_file_returns_empty(tmp_path: Path) -> None:
+    target = tmp_path / "inventory.json"
+    target.write_text("   \n", encoding="utf-8")
+    assert len(load_inventory(target)) == 0
 
 
-def test_load_corrupted_json(temp_json: Path):
-    """Проверка: если JSON испорчен, программа не падает, а возвращает пустой справочник."""
-    temp_json.write_text("{это_не_json: 123, broken", encoding="utf-8")
-    inventory = load_inventory(temp_json)
-    assert len(inventory) == 0
+def test_load_broken_json_returns_empty(tmp_path: Path) -> None:
+    target = tmp_path / "inventory.json"
+    target.write_text("{not json", encoding="utf-8")
+    assert len(load_inventory(target)) == 0
 
 
-def test_load_invalid_structure(temp_json: Path):
-    """Проверка: если JSON валидный, но структура не соответствует ожиданиям (нет 'records')."""
-    temp_json.write_text(json.dumps({"wrong_key": []}))
-    inventory = load_inventory(temp_json)
-    assert len(inventory) == 0
+def test_load_wrong_structure_returns_empty(tmp_path: Path) -> None:
+    target = tmp_path / "inventory.json"
+    target.write_text(json.dumps({"items": []}), encoding="utf-8")
+    assert len(load_inventory(target)) == 0
 
 
-def test_save_and_load_success(temp_json: Path, sample_equipment: Equipment):
-    """Проверка: успешное сохранение записи и её последующее чтение."""
-    inv_write = Inventory()
-    inv_write.add(sample_equipment)
-    save_inventory(inv_write, temp_json)
+def test_load_skips_invalid_record_but_keeps_valid(tmp_path: Path) -> None:
+    target = tmp_path / "inventory.json"
+    payload = {
+        "records": [
+            {
+                "inventory_number": "PC-0001",
+                "type": "ПК",
+                "name": "Системный блок",
+                "room": "204",
+                "state": "исправно",
+            },
+            {"inventory_number": "", "type": "ПК", "name": "x", "room": "1", "state": "исправно"},
+        ]
+    }
+    target.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    inv = load_inventory(target)
+    assert len(inv) == 1
+    assert inv.get_by_number("PC-0001") is not None
 
-    assert temp_json.exists(), "Файл данных должен быть создан после сохранения"
 
-    inv_read = load_inventory(temp_json)
-    assert len(inv_read) == 1
+def test_save_creates_parent_dir_and_round_trips(tmp_path: Path) -> None:
+    target = tmp_path / "nested" / "data" / "inventory.json"
+    inv = Inventory([make("PC-0001"), make("PC-0002")])
+    save_inventory(inv, target)
 
-    loaded_item = inv_read.get_by_number("QA-001")
-    assert loaded_item is not None
-    assert loaded_item.name == "Тестовый стенд QA"
-    assert loaded_item.room == "404"
+    assert target.exists()
+    reloaded = load_inventory(target)
+    assert [i.inventory_number for i in reloaded.all()] == ["PC-0001", "PC-0002"]
+
+
+def test_save_does_not_leave_tmp_file(tmp_path: Path) -> None:
+    target = tmp_path / "inventory.json"
+    save_inventory(Inventory([make()]), target)
+    leftovers = list(tmp_path.glob("*.tmp"))
+    assert leftovers == []
+
+
+def test_save_is_atomic_on_replace_failure(tmp_path: Path, monkeypatch) -> None:
+    target = tmp_path / "inventory.json"
+    save_inventory(Inventory([make("OLD-1")]), target)
+    before = target.read_text(encoding="utf-8")
+
+    # Ломаем replace, чтобы проверить, что старый файл не пострадал
+    import storage
+
+    def boom(*args, **kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(Path, "replace", boom)
+    with pytest.raises(OSError):
+        save_inventory(Inventory([make("NEW-1")]), target)
+
+    assert target.read_text(encoding="utf-8") == before
+    assert list(tmp_path.glob("*.tmp")) == []
