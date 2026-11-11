@@ -156,6 +156,34 @@ class Inventory:
             if target in item.room.strip().lower()
         ]
 
+    def filter_by_state(self, state: str) -> list[Equipment]:
+        """Отфильтровать записи по состоянию (без учёта регистра)."""
+        target = state.strip().lower()
+        if not target:
+            return []
+        return [
+            item for item in self._records
+            if item.state.lower() == target
+        ]
+
+    def filter_by_room_and_state(
+            self,
+            room: str | None = None,
+            state: str | None = None,
+    ) -> list[Equipment]:
+        """Фильтр по кабинету и/или состоянию."""
+        results = list(self._records)
+
+        if room is not None and room.strip():
+            target_room = room.strip().lower()
+            results = [item for item in results if target_room in item.room.lower()]
+
+        if state is not None and state.strip():
+            target_state = state.strip().lower()
+            results = [item for item in results if item.state.lower() == target_state]
+
+        return sorted(results, key=lambda item: item.inventory_number)
+
     def add(self, equipment: Equipment) -> None:
         """Добавить новую запись. Если номер уже существует — ValueError."""
         if self.has_number(equipment.inventory_number):

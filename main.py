@@ -20,7 +20,7 @@ MENU: tuple[tuple[str, str, str | None], ...] = (
     ("3", "Найти оборудование", None),
     ("4", "Изменить запись", None),
     ("5", "Удалить запись", None),
-    ("6", "Фильтр по кабинету/состоянию", "спринте 5"),
+    ("6", "Фильтр по кабинету/состоянию", None),
     ("0", "Выход", None),
 )
 
@@ -291,6 +291,51 @@ def delete_equipment(inventory: Inventory, data_file: Path) -> None:
     except (EOFError, KeyboardInterrupt):
         print("\nОтменено.")
 
+def filter_equipment(inventory: Inventory) -> None:
+    """Пункт 6: фильтр по кабинету и/или состоянию."""
+    print()
+    print("ФИЛЬТР ОБОРУДОВАНИЯ")
+    print("Можно указать только кабинет, только состояние или оба параметра.")
+    print("Пустое значение — не учитывать этот критерий.")
+    print()
+
+    try:
+        room = input("Кабинет (можно пусто): ").strip()
+
+        print("\nДоступные состояния:")
+        for i, s in enumerate(STATES, 1):
+            print(f"  {i}. {s}")
+        state_input = input("Состояние (номер, название или пусто): ").strip().lower()
+
+        state = None
+        if state_input:
+            if state_input.isdigit() and 1 <= int(state_input) <= len(STATES):
+                state = STATES[int(state_input) - 1]
+            else:
+                state = state_input
+
+        if not room and not state:
+            print("Не указан ни один критерий фильтрации.")
+            return
+
+        results = inventory.filter_by_room_and_state(
+            room=room or None,
+            state=state,
+        )
+
+        print()
+        if not results:
+            print("По заданным условиям ничего не найдено.")
+            return
+
+        print(f"Найдено записей: {len(results)}")
+        for line in render_table(results):
+            print(line)
+
+    except (EOFError, KeyboardInterrupt):
+        print("\nОтменено.")
+    except ValueError as e:
+        print(f"Ошибка: {e}")
 
 def main(argv: list[str] | None = None) -> int:
     """Точка входа. Возвращает код завершения."""
@@ -336,6 +381,10 @@ def main(argv: list[str] | None = None) -> int:
             continue
         if choice == "5":
             delete_equipment(inventory, data_file)
+            continue
+
+        if choice == "6":
+            filter_equipment(inventory)
             continue
 
         item = MENU_BY_KEY.get(choice)
