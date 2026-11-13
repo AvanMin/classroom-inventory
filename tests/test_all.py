@@ -63,7 +63,13 @@ def test_equipment_rejects_unknown_state() -> None:
 def test_equipment_received_at_display() -> None:
     assert make(received_at="2021-09-01").received_at_display == "01.09.2021"
     assert make(received_at="").received_at_display == "-"
-    assert make(received_at="not-a-date").received_at_display == "not-a-date"
+    with pytest.raises(ValueError, match="в формате ГГГГ-ММ-ДД"):
+        make(received_at="not-a-date")
+
+
+def test_equipment_rejects_digits_in_responsible() -> None:
+    with pytest.raises(ValueError, match="не должно содержать цифры"):
+        make(responsible="Иванов 123")
 
 
 def test_from_dict_normalizes_number_and_state() -> None:
@@ -401,7 +407,7 @@ def test_cli_find_by_number_and_missing(
     monkeypatch.setattr("builtins.input", lambda _: next(inputs_missing))
     find_equipment(inv)
     out_missing = capsys.readouterr().out
-    assert "не найдена" in out_missing
+    assert "Ничего не найдено." in out_missing
 
 
 def test_cli_edit_equipment(
