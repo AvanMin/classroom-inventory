@@ -315,6 +315,24 @@ DEMO_RECORDS: tuple[Equipment, ...] = (
         received_at="2015-09-01",
         responsible="Сидоров В. П.",
     ),
+    Equipment(
+        inventory_number="UPS-0001",
+        kind="ИБП",
+        name="Источник бесперебойного питания APC Back-UPS 700VA",
+        room="204",
+        state="исправно",
+        received_at="2022-08-25",
+        responsible="Иванов И. И.",
+    ),
+    Equipment(
+        inventory_number="SW-0001",
+        kind="коммутатор",
+        name="Коммутатор TP-Link TL-SG1024D 24-port",
+        room="112",
+        state="исправно",
+        received_at="2021-10-14",
+        responsible="Кузнецова М. В.",
+    ),
 )
 
 
