@@ -38,6 +38,31 @@ COLUMNS: tuple[tuple[str, str, int], ...] = (
     ("Ответственный", "responsible", 20),
 )
 
+#: Списки для выбора при добавлении записи.
+EQUIPMENT_NAMES: tuple[str, ...] = (
+    "БЕШТАУ",
+    "msi",
+    "GX",
+)
+
+ROOM_OPTIONS: tuple[str, ...] = (
+    "301", "305", "310", "315", "321",
+)
+
+DATE_OPTIONS: tuple[str, ...] = (
+    "2022-09-01",
+    "2023-02-14",
+    "2023-11-20",
+    "2024-03-18",
+    "2024-10-05",
+)
+
+RESPONSIBLE_OPTIONS: tuple[str, ...] = (
+    "Кочедыков Тихон",
+    "Кудашова Мария",
+    "Лаврова Мария",
+)
+
 LINE = "-" * 95
 
 
@@ -118,38 +143,6 @@ def show_inventory(inventory: Inventory) -> None:
     print(f"Всего записей: {len(records)}")
 
 
-def _read_received_at() -> str:
-    """Запросить дату поступления с проверкой формата ГГГГ-ММ-ДД."""
-    while True:
-        raw = input(
-            "Дата поступления (ГГГГ-ММ-ДД, можно пусто): "
-        ).strip()
-        if not raw:
-            return ""
-        try:
-            date.fromisoformat(raw)
-        except ValueError:
-            print("  Неверный формат даты. Пример: 2024-09-01. "
-                  "Оставьте пусто, если дата неизвестна.")
-            continue
-        return raw
-
-
-def _read_responsible() -> str:
-    """Запросить ответственного; цифры в значении запрещены."""
-    while True:
-        raw = input(
-            "Ответственный (только буквы, можно пусто): "
-        ).strip()
-        if not raw:
-            return ""
-        if any(ch.isdigit() for ch in raw):
-            print("  Ответственный не должен содержать цифры. "
-                  "Введите ФИО без цифр или оставьте пусто.")
-            continue
-        return raw
-
-
 def add_equipment(inventory: Inventory, data_file: Path) -> None:
     print()
     print("ДОБАВЛЕНИЕ НОВОЙ ЗАПИСИ")
@@ -157,6 +150,7 @@ def add_equipment(inventory: Inventory, data_file: Path) -> None:
     print()
 
     try:
+        # Тип оборудования
         print("Доступные типы:")
         for i, kind in enumerate(KINDS, 1):
             print(f"  {i}. {kind}")
@@ -169,6 +163,7 @@ def add_equipment(inventory: Inventory, data_file: Path) -> None:
         else:
             kind = kind_input
 
+        # Инвентарный номер
         suggested_number = inventory.suggest_next_number(kind)
         number = input(
             f"Инвентарный номер [Enter для {suggested_number}]: "
@@ -180,16 +175,33 @@ def add_equipment(inventory: Inventory, data_file: Path) -> None:
             print(f"Ошибка: запись с номером {number!r} уже существует.")
             return
 
-        name = input("Наименование: ").strip()
-        if not name:
+        # Наименование (выбор из списка)
+        print("\nДоступные наименования:")
+        for i, name_opt in enumerate(EQUIPMENT_NAMES, 1):
+            print(f"  {i}. {name_opt}")
+        name_input = input("Наименование (номер или название): ").strip()
+        if not name_input:
             print("Отменено: наименование обязательно.")
             return
+        if name_input.isdigit() and 1 <= int(name_input) <= len(EQUIPMENT_NAMES):
+            name = EQUIPMENT_NAMES[int(name_input) - 1]
+        else:
+            name = name_input
 
-        room = input("Кабинет: ").strip()
-        if not room:
+        # Кабинет (выбор из списка)
+        print("\nДоступные кабинеты:")
+        for i, room_opt in enumerate(ROOM_OPTIONS, 1):
+            print(f"  {i}. {room_opt}")
+        room_input = input("Кабинет (номер или название): ").strip()
+        if not room_input:
             print("Отменено: кабинет обязателен.")
             return
+        if room_input.isdigit() and 1 <= int(room_input) <= len(ROOM_OPTIONS):
+            room = ROOM_OPTIONS[int(room_input) - 1]
+        else:
+            room = room_input
 
+        # Состояние
         print("\nДоступные состояния:")
         for i, state in enumerate(STATES, 1):
             print(f"  {i}. {state}")
@@ -202,8 +214,38 @@ def add_equipment(inventory: Inventory, data_file: Path) -> None:
         else:
             state = state_input
 
-        received_at = _read_received_at()
-        responsible = _read_responsible()
+        # Дата поступления (выбор из списка)
+        print("\nДоступные даты поступления:")
+        for i, date_opt in enumerate(DATE_OPTIONS, 1):
+            print(f"  {i}. {date_opt}")
+        date_input = input("Дата поступления (номер или ГГГГ-ММ-ДД, можно пусто): ").strip()
+        if not date_input:
+            received_at = ""
+        elif date_input.isdigit() and 1 <= int(date_input) <= len(DATE_OPTIONS):
+            received_at = DATE_OPTIONS[int(date_input) - 1]
+        else:
+            # Если ввели не номер, проверяем, что это валидная дата
+            try:
+                date.fromisoformat(date_input)
+                received_at = date_input
+            except ValueError:
+                print("  Неверный формат даты. Пример: 2024-09-01.")
+                return
+
+        # Ответственный (выбор из списка)
+        print("\nДоступные ответственные:")
+        for i, resp_opt in enumerate(RESPONSIBLE_OPTIONS, 1):
+            print(f"  {i}. {resp_opt}")
+        resp_input = input("Ответственный (номер или ФИО, можно пусто): ").strip()
+        if not resp_input:
+            responsible = ""
+        elif resp_input.isdigit() and 1 <= int(resp_input) <= len(RESPONSIBLE_OPTIONS):
+            responsible = RESPONSIBLE_OPTIONS[int(resp_input) - 1]
+        else:
+            if any(ch.isdigit() for ch in resp_input):
+                print("  Ответственный не должен содержать цифры.")
+                return
+            responsible = resp_input
 
         equipment = Equipment(
             inventory_number=number.upper(),

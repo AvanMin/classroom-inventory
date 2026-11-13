@@ -1,6 +1,42 @@
 {
   "records": [
     {
+      "inventory_number": "21",
+      "type": "ПК",
+      "name": "пыва",
+      "room": "101",
+      "state": "исправно",
+      "received_at": "",
+      "responsible": ""
+    },
+    {
+      "inventory_number": "321",
+      "type": "ПК",
+      "name": "проба",
+      "room": "100",
+      "state": "требует ремонта",
+      "received_at": "2009-11-19",
+      "responsible": ""
+    },
+    {
+      "inventory_number": "41",
+      "type": "ПК",
+      "name": "авыа",
+      "room": "ваы",
+      "state": "исправно",
+      "received_at": "",
+      "responsible": ""
+    },
+    {
+      "inventory_number": "MON-0001",
+      "type": "монитор",
+      "name": "msi",
+      "room": "305",
+      "state": "требует ремонта",
+      "received_at": "2023-02-14",
+      "responsible": "Кудашова Мария"
+    },
+    {
       "inventory_number": "PC-0001",
       "type": "ПК",
       "name": "Системный блок Dell OptiPlex 3070",
@@ -26,6 +62,24 @@
       "state": "исправно",
       "received_at": "2024-09-01",
       "responsible": "dsxghcbghlj"
+    },
+    {
+      "inventory_number": "PC-0004",
+      "type": "ПК",
+      "name": "ывывап",
+      "room": "ваы",
+      "state": "требует ремонта",
+      "received_at": "2009-12-01",
+      "responsible": "АВЫу"
+    },
+    {
+      "inventory_number": "PC-0005",
+      "type": "ПК",
+      "name": "название ПК",
+      "room": "305",
+      "state": "исправно",
+      "received_at": "2022-09-01",
+      "responsible": "Кочедыков Тихон"
     }
   ]
 }
