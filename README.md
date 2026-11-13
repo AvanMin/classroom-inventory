@@ -12,11 +12,11 @@
 
 ## Команда
 
-| Участник       | Спринт 1            | Спринт 2            | Спринт 3         | Спринт 4            | Спринт 5            | Спринт 6            |
-|----------------|---------------------|---------------------|------------------|---------------------|---------------------|---------------------|
-| Мария Кудашова | Product Owner (PO)  | Lead Developer (LD) | QA / DevOps      | Product Owner (PO)  | Lead Developer (LD) | QA / DevOps         |
-| Тихон Кочедыков| Lead Developer (LD) | QA / DevOps         | Product Owner (PO)| Lead Developer (LD) | QA / DevOps         | Product Owner (PO)  |
-| Мария Лаврова  | QA / DevOps         | Product Owner (PO)  | Lead Developer(LD)| QA / DevOps         | Product Owner (PO)  | Lead Developer (LD) |
+| Участник       | Спринт 1            | Спринт 2            | Спринт 3         | Спринт 4            | Спринт 5            | Спринт 6            | Дополнение        |
+|----------------|---------------------|---------------------|------------------|---------------------|---------------------|---------------------|-------------------|
+| Мария Кудашова | Product Owner (PO)  | Lead Developer (LD) | QA / DevOps      | Product Owner (PO)  | Lead Developer (LD) | QA / DevOps         | Product Owner (PO) |
+| Тихон Кочедыков| Lead Developer (LD) | QA / DevOps         | Product Owner (PO)| Lead Developer (LD) | QA / DevOps         | Product Owner (PO)  |Lead Developer (LD)| 
+| Мария Лаврова  | QA / DevOps         | Product Owner (PO)  | Lead Developer(LD)| QA / DevOps         | Product Owner (PO)  | Lead Developer (LD) |QA / DevOps        |
 
 Роли меняются каждый спринт.
 
