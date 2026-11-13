@@ -106,15 +106,7 @@ def add_equipment(inventory: Inventory, data_file: Path) -> None:
     print()
 
     try:
-        number = input("Инвентарный номер: ").strip()
-        if not number:
-            print("Отменено: номер не может быть пустым.")
-            return
-        if inventory.has_number(number):
-            print(f"Ошибка: запись с номером {number!r} уже существует.")
-            return
-
-        print("\nДоступные типы:")
+        print("Доступные типы:")
         for i, kind in enumerate(KINDS, 1):
             print(f"  {i}. {kind}")
         kind_input = input("Тип оборудования (номер или название): ").strip()
@@ -125,6 +117,17 @@ def add_equipment(inventory: Inventory, data_file: Path) -> None:
             kind = KINDS[int(kind_input) - 1]
         else:
             kind = kind_input
+
+        suggested_number = inventory.suggest_next_number(kind)
+        number = input(
+            f"Инвентарный номер [Enter для {suggested_number}]: "
+        ).strip()
+        if not number:
+            number = suggested_number
+
+        if inventory.has_number(number):
+            print(f"Ошибка: запись с номером {number!r} уже существует.")
+            return
 
         name = input("Наименование: ").strip()
         if not name:

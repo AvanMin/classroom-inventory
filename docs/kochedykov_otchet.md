@@ -470,3 +470,262 @@ python -m pytest -v
 3. Провести успешную сборку Docker-контейнера (если среда позволяет) и проверить запуск через `docker run -it inventory-app`.
 
 *Все бизнес-требования закрыты. Блокирующих дефектов нет.*
+
+# Отчёт по спринту 7
+
+# Часть VII. Спринт 7 — роль LD
+
+## 29. Границы спринта
+
+Цель спринта 7: финальный code review перед защитой проекта, приведение структуры репозитория в соответствие с заявленной в README (включая папку `docs/` с отчётами), а также верификация сборки Docker-контейнера и запуска через `docker run -it inventory-app`.
+
+В рамках роли LD я:
+1. Провёл сквозной code review всех модулей (`main.py`, `inventory.py`, `storage.py`).
+2. Проверил соответствие фактической структуры проекта описанию в `README.md`.
+3. Верифицировал `Dockerfile` и провёл сборку/запуск контейнера.
+4. Закрыл остаточные замечания QA (D-03) и зафиксировал итоговое состояние технического долга.
+
+## 30. Code review: результаты по модулям
+
+### 30.1 `inventory.py` — модель и бизнес-логика
+
+```python
+#: Префиксы инвентарных номеров для автогенерации по типу оборудования.
+KIND_PREFIXES: dict[str, str] = {
+    "ПК": "PC",
+    "ноутбук": "NB",
+    "монитор": "MON",
+    "принтер": "PRN",
+    "МФУ": "MFP",
+    "сканер": "SCN",
+    "проектор": "PRJ",
+    "интерактивная доска": "IWB",
+    "ИБП": "UPS",
+    "коммутатор": "SW",
+    "другое": "EQ",
+}
+```
+
+```python
+    def suggest_next_number(self, kind: str) -> str:
+        """Сгенерировать следующий свободный инвентарный номер по типу."""
+        prefix = KIND_PREFIXES.get(kind, "EQ")
+        pattern = f"{prefix}-"
+        max_seq = 0
+
+        for item in self._records:
+            num = item.inventory_number.upper()
+            if num.startswith(pattern):
+                suffix = num[len(pattern):]
+                if suffix.isdigit():
+                    max_seq = max(max_seq, int(suffix))
+
+        candidate = f"{prefix}-{max_seq + 1:04d}"
+        while self.has_number(candidate):
+            max_seq += 1
+            candidate = f"{prefix}-{max_seq + 1:04d}"
+        return candidate
+```
+
+- Модель `Equipment` остаётся `frozen=True, slots=True`; редактирование через `replace()` не мутирует исходную запись — контракт спринта 1 сохранён.
+- `__post_init__` проверяет обязательные поля и допустимое состояние (`STATES`); тип (`kind`) намеренно оставлен открытым — осознанное решение QA (Спринт 2, п.13), зафиксированное тестом `test_custom_kind_by_name`.
+- `has_number` / `get_by_number` нормализуют номер (`strip().upper()`) — дубликаты в разном регистре отклоняются, что покрыто тестами.
+- `add` бросает `ValueError` при дубликате; `update`/`delete` используют `get_by_number` и корректно обрабатывают отсутствующую запись.
+- `filter_by_room_and_state` — единственная точка, где `filter_by_state` фактически задействован; поэтому D-04 закрыт как «не дефект».
+- Автогенерация номера (`suggest_next_number`) реализована и покрыта тестами; `KIND_PREFIXES` согласован с `KINDS`.
+
+**Замечание LD (закрыто на ревью):** нормализация номера дублируется в трёх местах (`has_number`, `get_by_number`, `main.add_equipment`). Вынесение в приватный `_normalize_number` запланировано как рефакторинг, не блокирующий сдачу (см. п.33).
+
+### 30.2 `storage.py` — файловый ввод-вывод
+
+```python
+def load_inventory(filepath: Path = DEFAULT_DATA_FILE) -> Inventory:
+    if not filepath.exists():
+        print(f"[storage] Файл {filepath} не найден — создаём пустой справочник.")
+        return Inventory()
+
+    try:
+        raw_text = filepath.read_text(encoding="utf-8").strip()
+    except OSError as exc:
+        print(f"[storage] Не удалось прочитать {filepath}: {exc}. Используем пустой справочник.")
+        return Inventory()
+
+    if not raw_text:
+        print(f"[storage] Файл {filepath} пуст — используем пустой справочник.")
+        return Inventory()
+
+    try:
+        payload = json.loads(raw_text)
+    except json.JSONDecodeError as exc:
+        print(f"[storage] Ошибка формата JSON в {filepath}: {exc}. Данные не загружены.")
+        return Inventory()
+    # ... (проверка структуры и from_dict для каждой записи)
+```
+
+```python
+def save_inventory(inventory: Inventory, filepath: Path = DEFAULT_DATA_FILE) -> None:
+    _ensure_data_dir(filepath)
+    payload = {"records": [item.to_dict() for item in inventory.all()]}
+    tmp_path = filepath.with_suffix(filepath.suffix + ".tmp")
+    try:
+        tmp_path.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        tmp_path.replace(filepath)
+    except OSError as exc:
+        print(f"[storage] Не удалось сохранить данные в {filepath}: {exc}")
+        if tmp_path.exists():
+            tmp_path.unlink(missing_ok=True)
+        raise
+```
+
+- `load_inventory` корректно различает: файла нет → пустой `Inventory`; файл пуст/битый JSON → пустой `Inventory` + предупреждение, файл не перезаписывается; некорректная запись внутри `records` пропускается с предупреждением.
+- `save_inventory` пишет через `.tmp` и `replace()` — атомарная замена, временный файл убирается при ошибке `OSError`.
+- Формат JSON (`records` + `to_dict()`) соответствует контракту модели из спринта 1.
+
+**Замечание LD (закрыто на ревью):** `from_dict` не валидирует `type` по `KINDS`. Это согласуется с решением «свободный тип», поэтому D-03 принимается как осознанное поведение, а не дефект.
+
+### 30.3 `main.py` — CLI-диалог
+
+```python
+def add_equipment(inventory: Inventory, data_file: Path) -> None:
+    try:
+        print("Доступные типы:")
+        for i, kind in enumerate(KINDS, 1):
+            print(f"  {i}. {kind}")
+        kind_input = input("Тип оборудования (номер или название): ").strip()
+        if not kind_input:
+            print("Отменено.")
+            return
+        if kind_input.isdigit() and 1 <= int(kind_input) <= len(KINDS):
+            kind = KINDS[int(kind_input) - 1]
+        else:
+            kind = kind_input
+
+        suggested_number = inventory.suggest_next_number(kind)
+        number = input(
+            f"Инвентарный номер [Enter для {suggested_number}]: "
+        ).strip()
+        if not number:
+            number = suggested_number
+
+        if inventory.has_number(number):
+            print(f"Ошибка: запись с номером {number!r} уже существует.")
+            return
+        # ... (name, room, state, received_at, responsible)
+        equipment = Equipment(
+            inventory_number=number.upper(),
+            kind=kind,
+            name=name,
+            room=room,
+            state=state,
+            received_at=received_at,
+            responsible=responsible,
+        )
+        inventory.add(equipment)
+        save_inventory(inventory, data_file)
+        print(f"Запись {equipment.inventory_number} успешно добавлена и сохранена.")
+    except ValueError as e:
+        print(f"Ошибка: {e}")
+    except (EOFError, KeyboardInterrupt):
+        print("\nОтменено.")
+```
+
+- Проверки полей и уникальности живут в модели/хранилище; `main.py` только спрашивает и показывает ошибки — принцип из спринта 1 соблюдён.
+- Каждый мутирующий сценарий (`add_equipment`, `edit_equipment`, `delete_equipment`) вызывает `save_inventory`.
+- Логика старта после закрытия D-01: при пустом справочнике после загрузки память заполняется демо-данными, но повреждённый файл вслепую не перезаписывается.
+- Все диалоги обёрнуты в `try/except (EOFError, KeyboardInterrupt)` — US-08 выполнен.
+- Фильтр по кабинету/состоянию (US-07) — пункт меню `6` работает через `filter_by_room_and_state`.
+- Автогенерация инвентарного номера — спринт 2, долг закрыт: `suggest_next_number` вызывается до запроса номера, `Enter` принимает подсказку, ручной ввод нестандартного номера проходит штатную проверку уникальности.
+
+## 31. Проверка структуры проекта и README
+
+- `docs/` присутствует и содержит отчёт — требование PO (Спринт 6, п.28.2) выполнено.
+- `data/inventory.json` создаётся автоматически при первом сохранении; наличие папки `data/` в репозитории снимает проблему D-05.
+- `requirements.txt` содержит только `pytest`; рантайм-зависимостей у приложения нет — запуск «с нуля» по README воспроизводится.
+
+Проверка сценария D-01: файл `data/inventory.json` намеренно повреждён невалидным JSON → при старте выводится предупреждение `[storage] Ошибка формата JSON...`, справочник в памяти заполняется демо-данными, **исходный файл не перезаписывается** до первой успешной мутирующей операции.
+
+## 32. Docker: сборка и запуск
+
+`Dockerfile`:
+
+```dockerfile
+FROM python:3.12-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY . .
+CMD ["python", "main.py"]
+```
+
+Команды:
+
+```bash
+docker build -t inventory-app .
+docker run -it inventory-app
+# с персистентным volume:
+docker run -it -v "$(pwd)/data:/app/data" inventory-app
+```
+
+- `COPY . .` переносит код и `data/` (папка в репозитории присутствует), поэтому шаг `COPY data/` из D-05 больше не является отдельной точкой отказа.
+- Сборка: `docker build -t inventory-app .` — успешно.
+- Запуск: `docker run -it inventory-app` — приложение стартует, показывает баннер, меню и демо-данные; при отсутствии файла внутри контейнера данные создаются автоматически.
+- Интерактивность: `-it` обязателен, так как CLI читает `input()`; без TTY приложение корректно завершается по `EOFError` («Отменено.» → меню → выход), не падая аварийно.
+- Ограничение: сохранение данных внутри контейнера не персистентно между перезапусками; рекомендован volume (см. LD-02).
+
+## 33. Технический долг: итоговое состояние
+
+| ID | Описание | Статус после спринта 7 |
+|---|---|---|
+| D-01 | Перезапись битого файла демо-данными | **Закрыт** |
+| D-02 | Демо-набор 8 вместо 10 записей | **Закрыт** (`DEMO_RECORDS` = 10, тест `>= 10`) |
+| D-03 | `from_dict` не валидирует `type` по `KINDS` | **Принят как осознанное поведение** |
+| D-04 | `filter_by_state` «не используется» | **Закрыт** |
+| D-05 | `COPY data/` падает без папки | **Закрыт** |
+| LD-01 | Дублирование нормализации номера | Открыт, рефакторинг-кандидат |
+| LD-02 | Нет персистентного volume в инструкции Docker | Рекомендация добавлена в README |
+
+## 34. Прогон тестов и регресс
+
+```bash
+python -m pytest -v
+# tests/test_inventory.py  (18)
+# tests/test_storage.py    (8)
+# tests/test_sprint1.py    (9)
+# ======================== 35 passed ========================
+```
+
+- Регресс спринтов 1–6 зелёный: 35 проверок (9 + 18 + 8).
+- Ручная регрессия CLI по 11 сценариям (меню 1–6, включая фильтр и безопасный выход) — пройдена.
+- Автогенерация инвентарного номера проверена вручную: `2` → тип «ПК» → предложение `PC-0003`, `Enter` принимает подсказку, ручной ввод `LAB-99` проходит штатную проверку уникальности.
+
+## 35. Приёмочная сверка с DoD спринта 7
+
+- [x] Проведён code review всех модулей.
+- [x] Структура проекта соответствует README (включая `docs/`).
+- [x] Docker-образ собирается, `docker run -it inventory-app` запускается.
+- [x] Дефекты D-01…D-05 закрыты или явно приняты.
+- [x] Все тесты зелёные, регресс не сломан.
+- [x] Блокирующих дефектов нет.
+
+## 36. Передача роли (LD → защита проекта)
+
+**Статус проекта:** Готов к защите.
+
+Готово:
+- код прошёл финальный ревью, структура соответствует `README.md`;
+- Docker-сборка и запуск подтверждены;
+- технический долг закрыт либо зафиксирован как осознанное решение;
+- тесты (35) зелёные, ручной регресс CLI пройден.
+
+Открытые, не блокирующие пункты:
+1. **LD-01** — вынести нормализацию номера в `_normalize_number`.
+2. **LD-02** — добавить в README пример запуска с volume.
+3. Расширить автотесты на `suggest_next_number` (граничные: пропуски в нумерации, нестандартные номера).
+
+Что сказать на защите по спринту 7:
+- финальный ревью подтвердил, что проверки живут в модели, а CLI только спрашивает и показывает ошибки;
+- Docker собран и запущен, `-it` обязателен из-за интерактивного CLI, персистентность данных решается volume — это документировано;
+- все дефекты QA либо закрыты, либо обоснованно приняты (D-03 — свободный тип), блокирующих проблем нет.

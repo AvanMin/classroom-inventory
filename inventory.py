@@ -28,6 +28,21 @@ KINDS: tuple[str, ...] = (
     "другое",
 )
 
+#: Префиксы инвентарных номеров для автогенерации по типу оборудования.
+KIND_PREFIXES: dict[str, str] = {
+    "ПК": "PC",
+    "ноутбук": "NB",
+    "монитор": "MON",
+    "принтер": "PRN",
+    "МФУ": "MFP",
+    "сканер": "SCN",
+    "проектор": "PRJ",
+    "интерактивная доска": "IWB",
+    "ИБП": "UPS",
+    "коммутатор": "SW",
+    "другое": "EQ",
+}
+
 #: Поля, без которых запись не имеет смысла.
 REQUIRED_FIELDS: tuple[str, ...] = (
     "inventory_number",
@@ -135,6 +150,25 @@ class Inventory:
         """Проверить, существует ли запись с таким инвентарным номером."""
         normalized = number.strip().upper()
         return any(item.inventory_number.upper() == normalized for item in self._records)
+
+    def suggest_next_number(self, kind: str) -> str:
+        """Сгенерировать следующий свободный инвентарный номер по типу."""
+        prefix = KIND_PREFIXES.get(kind, "EQ")
+        pattern = f"{prefix}-"
+        max_seq = 0
+
+        for item in self._records:
+            num = item.inventory_number.upper()
+            if num.startswith(pattern):
+                suffix = num[len(pattern):]
+                if suffix.isdigit():
+                    max_seq = max(max_seq, int(suffix))
+
+        candidate = f"{prefix}-{max_seq + 1:04d}"
+        while self.has_number(candidate):
+            max_seq += 1
+            candidate = f"{prefix}-{max_seq + 1:04d}"
+        return candidate
 
     def get_by_number(self, number: str) -> Equipment | None:
         """Найти запись по инвентарному номеру. None — если не найдена."""
