@@ -8,6 +8,24 @@
       "state": "исправно",
       "received_at": "2021-09-01",
       "responsible": "Иванов И. И."
+    },
+    {
+      "inventory_number": "PC-0002",
+      "type": "ПК",
+      "name": "123",
+      "room": "123",
+      "state": "исправно",
+      "received_at": "",
+      "responsible": ""
+    },
+    {
+      "inventory_number": "PC-0003",
+      "type": "ПК",
+      "name": "21wertfyhgj",
+      "room": "wsadsxvcb",
+      "state": "исправно",
+      "received_at": "2024-09-01",
+      "responsible": "dsxghcbghlj"
     }
   ]
 }

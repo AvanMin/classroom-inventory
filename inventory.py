@@ -2,6 +2,9 @@
 
 Спринт 3 (роль LD): реализованы методы поиска по кабинету,
 редактирования состояния/кабинета и удаления записей.
+
+Поиск: точный/частичный по номеру и «умный» поиск по всем полям
+(каждое слово запроса должно встретиться хотя бы в одном поле записи).
 """
 
 from __future__ import annotations
@@ -77,6 +80,19 @@ class Equipment:
             raise ValueError(
                 f"Недопустимое состояние {self.state!r}; "
                 f"ожидается одно из: {', '.join(STATES)}"
+            )
+        if self.received_at:
+            try:
+                date.fromisoformat(self.received_at)
+            except ValueError as exc:
+                raise ValueError(
+                    f"Дата поступления {self.received_at!r} должна быть "
+                    f"в формате ГГГГ-ММ-ДД"
+                ) from exc
+        if self.responsible and any(ch.isdigit() for ch in self.responsible):
+            raise ValueError(
+                f"Поле 'responsible' ({self.responsible!r}) не должно "
+                f"содержать цифры"
             )
 
     @property
@@ -171,7 +187,7 @@ class Inventory:
         return candidate
 
     def get_by_number(self, number: str) -> Equipment | None:
-        """Найти запись по инвентарному номеру. None — если не найдена."""
+        """Найти запись по точному инвентарному номеру. None — если нет."""
         normalized = number.strip().upper()
         if not normalized:
             return None
@@ -179,6 +195,16 @@ class Inventory:
             if item.inventory_number.upper() == normalized:
                 return item
         return None
+
+    def search_by_number(self, fragment: str) -> list[Equipment]:
+        """Найти записи по фрагменту номера (подстрока, без учёта регистра)."""
+        f = fragment.strip().lower()
+        if not f:
+            return []
+        return sorted(
+            (item for item in self._records if f in item.inventory_number.lower()),
+            key=lambda item: item.inventory_number,
+        )
 
     def search_by_room(self, room: str) -> list[Equipment]:
         """Поиск записей по номеру/названию кабинета (без учета регистра)."""
@@ -189,6 +215,32 @@ class Inventory:
             item for item in self._records
             if target in item.room.strip().lower()
         ]
+
+    def search(self, query: str) -> list[Equipment]:
+        """«Умный» поиск по всем полям.
+
+        Запрос разбивается по пробелам. Запись попадает в результат, если
+        каждое слово запроса встречается хотя бы в одном текстовом поле
+        (номер, тип, наименование, кабинет, состояние, дата, ответственный).
+        Регистр и порядок слов не важны.
+        """
+        tokens = query.strip().lower().split()
+        if not tokens:
+            return []
+        results: list[Equipment] = []
+        for item in self._records:
+            haystack = " ".join((
+                item.inventory_number,
+                item.kind,
+                item.name,
+                item.room,
+                item.state,
+                item.received_at,
+                item.responsible,
+            )).lower()
+            if all(token in haystack for token in tokens):
+                results.append(item)
+        return sorted(results, key=lambda item: item.inventory_number)
 
     def filter_by_state(self, state: str) -> list[Equipment]:
         """Отфильтровать записи по состоянию (без учёта регистра)."""

@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import sys
+from datetime import date
 from pathlib import Path
 
 from inventory import Equipment, Inventory, KINDS, STATES, demo_inventory
@@ -26,12 +27,15 @@ MENU: tuple[tuple[str, str, str | None], ...] = (
 
 MENU_BY_KEY = {key: (title, sprint) for key, title, sprint in MENU}
 
+#: Колонки таблицы: (заголовок, атрибут модели, ширина).
 COLUMNS: tuple[tuple[str, str, int], ...] = (
     ("Номер", "inventory_number", 10),
     ("Тип", "kind", 19),
-    ("Наименование", "name", 34),
+    ("Наименование", "name", 30),
     ("Кабинет", "room", 8),
     ("Состояние", "state", 16),
+    ("Поступление", "received_at_display", 12),
+    ("Ответственный", "responsible", 20),
 )
 
 LINE = "-" * 95
@@ -68,6 +72,21 @@ def print_equipment_card(item: Equipment) -> None:
     print("  +---------------------------------------------------")
 
 
+def _show_search_results(results: list[Equipment]) -> None:
+    """1 совпадение — карточкой, много — таблицей, 0 — сообщением."""
+    print()
+    if not results:
+        print("Ничего не найдено.")
+        return
+    if len(results) == 1:
+        print("Найдено оборудование:")
+        print_equipment_card(results[0])
+        return
+    print(f"Найдено записей: {len(results)}")
+    for line in render_table(results):
+        print(line)
+
+
 def print_banner(inventory: Inventory, data_file: Path) -> None:
     print("=" * 95)
     print("  СИСТЕМА УЧЁТА ИНВЕНТАРЯ КОМПЬЮТЕРНЫХ КЛАССОВ")
@@ -97,6 +116,38 @@ def show_inventory(inventory: Inventory) -> None:
         print(line)
     print()
     print(f"Всего записей: {len(records)}")
+
+
+def _read_received_at() -> str:
+    """Запросить дату поступления с проверкой формата ГГГГ-ММ-ДД."""
+    while True:
+        raw = input(
+            "Дата поступления (ГГГГ-ММ-ДД, можно пусто): "
+        ).strip()
+        if not raw:
+            return ""
+        try:
+            date.fromisoformat(raw)
+        except ValueError:
+            print("  Неверный формат даты. Пример: 2024-09-01. "
+                  "Оставьте пусто, если дата неизвестна.")
+            continue
+        return raw
+
+
+def _read_responsible() -> str:
+    """Запросить ответственного; цифры в значении запрещены."""
+    while True:
+        raw = input(
+            "Ответственный (только буквы, можно пусто): "
+        ).strip()
+        if not raw:
+            return ""
+        if any(ch.isdigit() for ch in raw):
+            print("  Ответственный не должен содержать цифры. "
+                  "Введите ФИО без цифр или оставьте пусто.")
+            continue
+        return raw
 
 
 def add_equipment(inventory: Inventory, data_file: Path) -> None:
@@ -151,8 +202,8 @@ def add_equipment(inventory: Inventory, data_file: Path) -> None:
         else:
             state = state_input
 
-        received_at = input("Дата поступления (ГГГГ-ММ-ДД, можно пусто): ").strip()
-        responsible = input("Ответственный (можно пусто): ").strip()
+        received_at = _read_received_at()
+        responsible = _read_responsible()
 
         equipment = Equipment(
             inventory_number=number.upper(),
@@ -175,41 +226,47 @@ def add_equipment(inventory: Inventory, data_file: Path) -> None:
 
 
 def find_equipment(inventory: Inventory) -> None:
+    """Пункт 3: поиск по номеру (умный) и по кабинету."""
     print()
     print("ПОИСК ОБОРУДОВАНИЯ")
-    print("  1. По инвентарному номеру")
-    print("  2. По кабинету")
+    print("  1. Поиск по номеру (точный/частичный, при отсутствии — по всем полям)")
+    print("  2. Поиск по кабинету")
     print("  0. Назад в меню")
 
     try:
         sub_choice = input("Выберите режим поиска: ").strip()
-        if sub_choice == "1":
-            number = input("Введите инвентарный номер: ").strip()
-            if not number:
-                print("Номер не указан.")
-                return
-            item = inventory.get_by_number(number)
-            if item is None:
-                print(f"Запись с номером {number!r} не найдена.")
-            else:
-                print("\nНайдено оборудование:")
-                print_equipment_card(item)
-        elif sub_choice == "2":
-            room = input("Введите номер или название кабинета: ").strip()
-            if not room:
-                print("Кабинет не указан.")
-                return
-            results = inventory.search_by_room(room)
-            if not results:
-                print(f"В кабинете {room!r} ничего не найдено.")
-            else:
-                print(f"\nНайдено записей: {len(results)}")
-                for line in render_table(results):
-                    print(line)
-        elif sub_choice in {"0", ""}:
+        if sub_choice in {"0", ""}:
             return
-        else:
+        if sub_choice not in {"1", "2"}:
             print("Неверный режим поиска.")
+            return
+
+        if sub_choice == "1":
+            query = input("Что ищем: ").strip()
+            if not query:
+                print("Пустой запрос.")
+                return
+            # 1) точное совпадение по номеру → карточка
+            exact = inventory.get_by_number(query)
+            if exact is not None:
+                print("\nНайдено оборудование:")
+                print_equipment_card(exact)
+                return
+            # 2) частичное совпадение по номеру → таблица
+            by_number = inventory.search_by_number(query)
+            if by_number:
+                _show_search_results(by_number)
+                return
+            # 3) не нашли по номеру — ищем по всем полям
+            _show_search_results(inventory.search(query))
+            return
+
+        # sub_choice == "2" — по кабинету
+        room = input("Введите номер или название кабинета: ").strip()
+        if not room:
+            print("Кабинет не указан.")
+            return
+        _show_search_results(inventory.search_by_room(room))
     except (EOFError, KeyboardInterrupt):
         print("\nОтменено.")
 
@@ -293,6 +350,7 @@ def delete_equipment(inventory: Inventory, data_file: Path) -> None:
     except (EOFError, KeyboardInterrupt):
         print("\nОтменено.")
 
+
 def filter_equipment(inventory: Inventory) -> None:
     """Пункт 6: фильтр по кабинету и/или состоянию."""
     print()
@@ -339,6 +397,7 @@ def filter_equipment(inventory: Inventory) -> None:
     except ValueError as e:
         print(f"Ошибка: {e}")
 
+
 def main(argv: list[str] | None = None) -> int:
     """Точка входа. Возвращает код завершения."""
     del argv
@@ -346,7 +405,6 @@ def main(argv: list[str] | None = None) -> int:
     data_file = DEFAULT_DATA_FILE
     inventory = load_inventory(data_file)
 
-    # Если данных нет вовсе — стартуем на демо-записях и сразу сохраняем.
     if len(inventory) == 0:
         print("[main] Файл данных пуст. Заполняем демонстрационным справочником.")
         inventory = demo_inventory()
@@ -384,7 +442,6 @@ def main(argv: list[str] | None = None) -> int:
         if choice == "5":
             delete_equipment(inventory, data_file)
             continue
-
         if choice == "6":
             filter_equipment(inventory)
             continue
